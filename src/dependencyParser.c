@@ -220,8 +220,17 @@ static sParseResult_t processLine(char* line, bool consecutive)
     else if(strstr(parsedCharacter, cVersionEntry) == parsedCharacter)
     {
       parsedCharacter += strlen(cVersionEntry);
+      if(*parsedCharacter != '"')
+      {
+        printf("Name does not start with \"");
+        parseResult.resultType = invalid;
+        return parseResult;
+      }
+      parsedCharacter++;
+
       //Parse version and test if successfull and that the delimitter is expected
-      if(!parseVersion(parsedCharacter, &parseResult.version) || (*parsedCharacter != '"'))
+      parsedCharacter = parseVersion(parsedCharacter, &parseResult.version);
+      if((parsedCharacter == NULL) || (*parsedCharacter != '"'))
       {
         parseResult.resultType = invalid;
         return parseResult;
@@ -305,9 +314,8 @@ static sRequirement_t parseRequirement(char* character)
   }
   
   character++;
-  sVersion_t version;
   printf("Parsing Version\n");
-  character = parseVersion(character, &version);
+  character = parseVersion(character, &requirement.version);
   if(character == NULL)
   {
     printf("Parse Version failed!\n");
