@@ -299,13 +299,109 @@ int ListContains(sList_t* list, void* data)
     
     
 }
-sNode_t* ListFind(sList_t* list, void* data);
-int ListRemoveDuplicates(sList_t* list);
-bool ListFree(sList_t* list);
 
+/// @brief parses each node and removed any duplicates
+/// @param list 
+/// @return count of removed duplicates, -1 in case of error
+int ListRemoveDuplicates(sList_t* list)
+{
+    int removeCount = 0;
+    if(list == NULL)
+    {
+        return -1;
+    }
 
-void* ListGetNodeData(sNode_t* node);
-bool ListSetNodeData(sNode_t* node);
+    bool match = false;
+    sNode_t* referenceNode = list->head;
+    sNode_t* compareNode;
+    sNode_t* nextNode;
+    while(referenceNode != NULL)
+    {
+        compareNode = referenceNode->next;
+        while(compareNode != NULL)
+        {
+            //Use custom compare function if available
+            if(list->compareNodes != NULL)
+            {
+                match = list->compareNodes(referenceNode->data, compareNode->data);
+            }
+            else
+            {
+                match = referenceNode->data == compareNode->data;
+            }
+
+            if(match) //Duplicate found
+            {
+                nextNode = compareNode->next;
+                if(compareNode->next == NULL) //Tail
+                {
+                    list->tail = compareNode->previous;
+                    compareNode->previous->next = NULL;
+                }
+                else
+                {
+                    compareNode->previous->next = compareNode->next;
+                    compareNode->next->previous = compareNode->previous;
+                }
+                //Free data elemnt and memory of node itself
+                if(list->freeNode != NULL)
+                {
+                    list->freeNode(compareNode->data);
+                }
+                else
+                {
+                    free(compareNode->data);
+                }
+                free(compareNode);
+                list->iNodeCount--;
+                removeCount++;
+                compareNode = nextNode;
+            }
+            else
+            {
+                compareNode = compareNode->next;
+            } 
+        }
+        referenceNode = referenceNode->next;
+    }
+    return removeCount;
+}
+
+/// @brief frees the memory reserved for a list and its nodes
+/// @param list 
+/// @return true if succhessful, false if not
+bool ListFree(sList_t* list)
+{
+    if(list == NULL)
+    {
+        return false;
+    }
+
+    if(list->head == NULL || list->iNodeCount == 0)
+    {
+        return false;
+    }
+    sNode_t* node = list->head;
+    sNode_t* nextNode;
+    do
+    {
+        nextNode = node->next;
+        //Free data elemnt and memory of node itself
+        if(list->freeNode != NULL)
+        {
+            list->freeNode(node->data);
+        }
+        else
+        {
+            free(node->data);
+        }
+        free(node);
+        list->iNodeCount--;
+    } while (node->next != NULL);
+    
+    free(list);
+return true;
+}
 
 static sNode_t* ListCreateNode(sList_t* list, void* data)
 {
