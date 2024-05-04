@@ -1,0 +1,17 @@
+# Ignore object files and executables
+*.o
+*.out
+
+# Ignore build directories
+build/
+bin/
+
+# Ignore generated files
+*.exe
+*.dll
+
+# Ignore editor backup files
+*~
+
+# Ignore Unity vendor directory
+unity/vendor/

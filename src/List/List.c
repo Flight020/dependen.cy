@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 typedef struct sList
 {
@@ -20,9 +21,14 @@ typedef struct sNode
     sNode_t* previous;
 } sNode_t;
 
-static sNode_t* ListCreateNode(sList_t* list, void* data);
+static sNode_t* ListCreateNode(int size, void* data);
 static sNode_t* ListFind(sList_t* list, void* data);
 
+/// @brief Allocates a list which can be used as container for list nodes
+/// @param dataSize size of the data element a list node
+/// @param compareCallback pointer to custom compare function regarding the data element
+/// @param freeNodeCallback  pointer to custom free function regarding the data element
+/// @return returns a reference to the allocated 
 sList_t* ListCreate(int dataSize, fListCompare compareCallback, fListFreeNode freeNodeCallback)
 {
     if(dataSize == 0)
@@ -39,30 +45,48 @@ sList_t* ListCreate(int dataSize, fListCompare compareCallback, fListFreeNode fr
     newList->iNodeDataSize = dataSize;
     newList->compareNodes = compareCallback;
     newList->freeNode = freeNodeCallback;
+    newList->head = NULL;
+    newList->tail = NULL;
     return newList;
 }
 
-/// @brief  Allocates an array for the address of the data element of each node.
-//          The last element is NULL 
+/// @brief  Allocates an array containing the address of the data element of each node. The last element is NULL 
 /// @param list 
 /// @return Address of first data element
-void** ListGetIterator(sList_t* list)
+void* ListGetIterator(sList_t* list)
 {
-    if(list == NULL || list->iNodeCount || list->head == NULL)
+    if(list == NULL || list->iNodeCount == 0 || list->head == NULL)
     {
         return NULL;
     }
 
-    ListIterator_t iteratorArray = calloc(sizeof(void*), (list->iNodeCount + 1)); // plus one to have one empty at the end
+    void* iteratorArray = calloc((list->iNodeCount + 1), list->iNodeDataSize); // plus one to have one empty at the end
     sNode_t* node = list->head;
+    char* ptr;
     int count = 0;
-    iteratorArray[count++] = node->data;
+
+    ptr = iteratorArray;
+    memcpy(ptr, node->data, list->iNodeDataSize);
     while(node->next != NULL)
     {
         node = node->next;
-        iteratorArray[count++] = node->data;
+        ptr += list->iNodeDataSize;
+        memcpy(ptr, node->data, list->iNodeDataSize);
     }
     return iteratorArray;
+}
+
+bool ListFreeIterator(ListIterator_t iterator)
+{
+    if(iterator != NULL)
+    {
+        free(iterator);
+        return(true);
+    }
+    else
+    {
+        return false;
+    }
 }
 
 /// @brief Removes the first node of the list where data equals the nodes data
@@ -87,7 +111,7 @@ bool ListRemove(sList_t* list, void* data)
         }
         else
         {
-            match = node->data == data;
+            match = *((int*)node->data) == *((int*)data);
         }
 
         if(match)
@@ -133,7 +157,11 @@ bool ListRemove(sList_t* list, void* data)
 /// @return true if a new node was added, false else
 bool ListAppend(sList_t* list, void* data)
 {
-    sNode_t* newNode = ListCreateNode(list, data);
+    if(list == NULL)
+    {
+        return false;
+    }
+    sNode_t* newNode = ListCreateNode(list->iNodeDataSize, data);
     if (newNode == NULL) {
         return false;
     }
@@ -159,7 +187,11 @@ bool ListAppend(sList_t* list, void* data)
 /// @return true if a new node was added, false else
 bool ListPrepend(sList_t* list, void* data)
 {
-    sNode_t* newNode = ListCreateNode(list, data);
+    if(list == NULL)
+    {
+        return false;
+    }
+    sNode_t* newNode = ListCreateNode(list->iNodeDataSize, data);
     if(newNode == NULL)
     {
         return false;
@@ -187,11 +219,11 @@ bool ListPrepend(sList_t* list, void* data)
 /// @return true if a new node was added, false else
 bool ListInsertAfter(sList_t* list, void* target, void* data)
 {
-    if(target == NULL)
+    if(target == NULL || list == NULL)
     {
         return false;
     }
-    sNode_t* newNode = ListCreateNode(list, data);
+    sNode_t* newNode = ListCreateNode(list->iNodeDataSize, data);
     if(newNode == NULL)
     {
         return false;
@@ -227,11 +259,11 @@ bool ListInsertAfter(sList_t* list, void* target, void* data)
 /// @return true if a new node was added, false else
 bool ListInsertBefore(sList_t* list, void* target, void* data)
 {
-    if(target == NULL)
+    if(target == NULL || list == NULL)
     {
         return false;
     }
-    sNode_t* newNode = ListCreateNode(list, data);
+    sNode_t* newNode = ListCreateNode(list->iNodeDataSize, data);
     if(newNode == NULL)
     {
         return false;
@@ -288,16 +320,17 @@ int ListContains(sList_t* list, void* data)
         }
         else
         {
-            match = node->data == data;
+            match = *((int*)node->data) == *((int*)data);
         }
         if(match)
         {
             count++;
             match = false;
         }
+        node = node->next;
     } while (node != NULL);
     
-    
+    return count;
 }
 
 /// @brief parses each node and removed any duplicates
@@ -327,7 +360,7 @@ int ListRemoveDuplicates(sList_t* list)
             }
             else
             {
-                match = referenceNode->data == compareNode->data;
+                match = *((int*)referenceNode->data) == *((int*)compareNode->data);
             }
 
             if(match) //Duplicate found
@@ -369,7 +402,7 @@ int ListRemoveDuplicates(sList_t* list)
 
 /// @brief frees the memory reserved for a list and its nodes
 /// @param list 
-/// @return true if succhessful, false if not
+/// @return true if successful, false if not
 bool ListFree(sList_t* list)
 {
     if(list == NULL)
@@ -377,35 +410,61 @@ bool ListFree(sList_t* list)
         return false;
     }
 
-    if(list->head == NULL || list->iNodeCount == 0)
+    if(list->head != NULL)
     {
-        return false;
+        sNode_t* node = list->head;
+        sNode_t* nextNode;
+        while(node != NULL)
+        {
+            //Free data elemnt and memory of node itself
+            if(list->freeNode != NULL)
+            {
+                list->freeNode(node->data);
+            }
+            else
+            {
+                free(node->data);
+            }
+            nextNode = node->next;
+            free(node);
+            list->iNodeCount--;
+            node = nextNode;
+        }
     }
-    sNode_t* node = list->head;
-    sNode_t* nextNode;
-    do
-    {
-        nextNode = node->next;
-        //Free data elemnt and memory of node itself
-        if(list->freeNode != NULL)
-        {
-            list->freeNode(node->data);
-        }
-        else
-        {
-            free(node->data);
-        }
-        free(node);
-        list->iNodeCount--;
-    } while (node->next != NULL);
-    
     free(list);
+    list = NULL;
 return true;
 }
 
-static sNode_t* ListCreateNode(sList_t* list, void* data)
+/// @brief Returns the count of nodes of the list
+/// @param list 
+/// @return count of nodes, -1 if no valid list is given
+int ListGetCount(sList_t* list)
 {
-    if(list == NULL || data == NULL)
+    if(list == NULL)
+    {
+        return -1;
+    }
+
+    return list->iNodeCount;
+}
+
+/// @brief Returns the size of the data elemnts of list
+/// @param list 
+/// @return Size in bytes, -1 if no valid list is given
+int ListGetDataSize(sList_t* list)
+{
+    if(list == NULL)
+    {
+        return -1;
+    }
+
+    return list->iNodeDataSize;
+}
+
+static sNode_t* ListCreateNode(int size, void* data)
+{
+    if(size == 0 || data == NULL)
     {
         return NULL;
     }
@@ -416,10 +475,51 @@ static sNode_t* ListCreateNode(sList_t* list, void* data)
         return NULL;
     }
 
-    newNode->data = malloc(list->iNodeDataSize);
+    newNode->data = malloc(size);
     if(newNode->data == NULL)
     {
         return NULL;
     }
+    memcpy(newNode->data, data, size);
+    newNode->next = NULL;
+    newNode->previous = NULL;
     return newNode;
+}
+
+static sNode_t* ListFind(sList_t* list, void* data)
+{
+    if(list == NULL || data == NULL)
+    {
+        return NULL;
+    }
+
+    if(list->head == NULL || list->iNodeCount == 0)
+    {
+        return NULL;
+    }
+
+    bool match = false;
+    sNode_t* node = list->head;
+    while(node != NULL)
+    {
+        //Use custom compare function if available
+        if(list->compareNodes != NULL)
+        {
+            match = list->compareNodes(node->data, data);
+        }
+        else
+        {
+            match = *((int*)node->data) == *((int*)data);
+        }
+
+        if(match)
+        {
+            return node;
+        }
+        else
+        {
+            node = node->next;
+        }
+    }
+    return NULL;
 }
